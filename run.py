@@ -14,6 +14,7 @@ PROJECT_DIR = Path(__file__).resolve().parent
 VENV_PYTHON = PROJECT_DIR / ".venv" / "Scripts" / "python.exe"
 RUNNER_PORT = 8080
 RUNNER_URL = f"http://localhost:{RUNNER_PORT}"
+GAME_URL = "https://poki.com/en/g/hill-climb-racing-lite"
 
 
 def parse_args() -> argparse.Namespace:
@@ -23,6 +24,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--smooth-frames", type=int, default=4)
     parser.add_argument("--allow-left-hand", action="store_true")
     parser.add_argument(
+        "--preview",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Show webcam preview window (default: enabled)",
+    )
+    parser.add_argument(
         "--ports",
         default=str(RUNNER_PORT),
         help="Comma-separated ports to free before restart (example: 8080,5000)",
@@ -31,6 +38,12 @@ def parse_args() -> argparse.Namespace:
         "--kill-only",
         action="store_true",
         help="Only stop running processes/ports, do not start the game",
+    )
+    parser.add_argument(
+        "--open",
+        choices=("runner", "game", "both"),
+        default="both",
+        help="Which page to open in browser: local runner, direct game, or both",
     )
     return parser.parse_args()
 
@@ -170,8 +183,12 @@ def run_self_check(camera_index: int) -> None:
 
 
 def run_controller(args: argparse.Namespace) -> int:
-    print("[3/4] Starting gesture controller in no-window mode...")
-    print("      This keeps browser focus stable for key sync.")
+    if args.preview:
+        print("[3/4] Starting gesture controller with webcam preview...")
+        print("      Keep the game tab focused after preview appears.")
+    else:
+        print("[3/4] Starting gesture controller in no-window mode...")
+        print("      This keeps browser focus stable for key sync.")
     print("      Stop with Ctrl+C in this terminal.\n")
 
     cmd = [
@@ -183,14 +200,22 @@ def run_controller(args: argparse.Namespace) -> int:
         str(args.confidence),
         "--smooth-frames",
         str(args.smooth_frames),
-        "--no-window",
     ]
+    if not args.preview:
+        cmd.append("--no-window")
     if args.allow_left_hand:
         cmd.append("--allow-left-hand")
 
     process = subprocess.run(cmd, cwd=PROJECT_DIR)
     print("\n[4/4] Gesture controller exited.")
     return process.returncode
+
+
+def open_pages(open_target: str) -> None:
+    if open_target in {"runner", "both"}:
+        webbrowser.open(RUNNER_URL)
+    if open_target in {"game", "both"}:
+        webbrowser.open(GAME_URL)
 
 
 def main() -> None:
@@ -206,7 +231,7 @@ def main() -> None:
 
     runner = start_runner()
     time.sleep(1)
-    webbrowser.open(RUNNER_URL)
+    open_pages(args.open)
     time.sleep(2)
     run_self_check(args.camera_index)
 
