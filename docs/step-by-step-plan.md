@@ -2,6 +2,8 @@
 
 ## Phase 1 - Foundation
 
+Status: DONE
+
 1. Create project skeleton (`main.py`, `requirements.txt`, `README.md`, `docs/`).
 2. Install core libraries:
    - `mediapipe`
@@ -9,11 +11,23 @@
    - `pynput`
 3. Confirm webcam opens and can render a live frame.
 
+Completion notes:
+- Virtual environment created at `.venv/`
+- Dependencies installed successfully via `requirements.txt`
+- Webcam smoke test result: `CAM_OPEN True`
+
 ## Phase 2 - Hand Tracking
+
+Status: DONE
 
 1. Initialize MediaPipe Hands (`max_num_hands=1`).
 2. Track one hand and draw landmarks.
 3. Restrict to right hand for one-hand MVP.
+
+Completion notes:
+- Configured `max_num_hands=1` in `main.py`
+- Rendering hand landmarks with MediaPipe drawing utilities
+- Right-hand-only filtering enabled by default (`--allow-left-hand` to override)
 
 ## Phase 3 - Gesture Classification
 
@@ -53,3 +67,42 @@
 1. Verify script runs without syntax errors.
 2. Ensure docs are clear and complete.
 3. Keep commit clean and scoped to MVP.
+
+---
+
+## Checklist (Ticked So Far)
+
+- [x] Phase 1 - Foundation
+  - [x] Project skeleton created
+  - [x] Core libraries installed (`mediapipe`, `opencv-python`, `pynput`)
+  - [x] Webcam smoke test passed
+
+- [x] Phase 2 - Hand Tracking
+  - [x] MediaPipe Hands initialized with one-hand tracking
+  - [x] Hand landmarks drawn on webcam frame
+  - [x] Right-hand restriction applied for MVP
+
+- [x] Phase 3 - Gesture Classification
+  - [x] Finger open/closed inference from landmarks
+  - [x] Gesture mapping to ACCELERATING/BRAKING/NEUTRAL
+  - [x] Frame smoothing added
+
+- [x] Phase 4 - Keyboard Output
+  - [x] `pynput` key down/up handling
+  - [x] Gesture-to-key mapping implemented
+  - [x] Safe toggle key (`t`) implemented
+
+- [x] Phase 5 - UX Overlay
+  - [x] Webcam panel window and placement controls
+  - [x] Status box (mode, hand, state)
+  - [x] Quit shortcuts (`q` / `Esc`)
+
+- [ ] Phase 6 - Validation
+  - [ ] Notepad key-behavior sanity test
+  - [ ] Hill Climb Racing Lite focused-window test
+  - [ ] Confidence/smoothing tuning pass
+
+- [ ] Phase 7 - Push-Ready Checks
+  - [ ] Final syntax/run verification pass
+  - [ ] Final docs polish pass
+  - [ ] Commit hygiene review
