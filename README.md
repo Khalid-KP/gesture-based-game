@@ -2,6 +2,12 @@
 
 Real-time one-hand gesture controller for the browser game [Hill Climb Racing Lite](https://poki.com/en/g/hill-climb-racing-lite).
 
+## Demo
+
+[Watch demo video](docs/gesture_demo.mp4)
+
+<video src="docs/gesture_demo.mp4" controls width="900"></video>
+
 ## Controls
 
 - Open hand -> hold Right Arrow (accelerate)
