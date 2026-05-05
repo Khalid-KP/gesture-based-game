@@ -271,9 +271,10 @@ class GestureController:
         )
 
     def _classify(self, fingers: FingerState) -> Gesture:
-        if fingers.is_open_hand:
+        # Use tolerant thresholds so minor landmark jitter still triggers controls.
+        if fingers.open_count >= 4:
             return Gesture.ACCELERATE
-        if fingers.is_fist:
+        if fingers.open_count <= 1:
             return Gesture.BRAKE
         return Gesture.NEUTRAL
 

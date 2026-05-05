@@ -269,7 +269,7 @@
           focusText.textContent = "Focused. Keep the game active.";
           focusText.className = "muted focusOk";
         } else {
-          focusText.textContent = "Focus lost. Control auto-disabled for safety.";
+          focusText.textContent = "Runner unfocused. Control stays active for separate game tab play.";
           focusText.className = "muted focusWarn";
         }
       }
@@ -293,15 +293,9 @@
         embedFallback.classList.remove("show");
       });
 
-      window.addEventListener("blur", () => {
-        updateFocusState();
-        void setControl(false).catch(() => {});
-      });
+      window.addEventListener("blur", updateFocusState);
       window.addEventListener("focus", updateFocusState);
-      document.addEventListener("visibilitychange", () => {
-        if (document.hidden) void setControl(false).catch(() => {});
-        updateFocusState();
-      });
+      document.addEventListener("visibilitychange", updateFocusState);
 
       updateFocusState();
       void syncState();

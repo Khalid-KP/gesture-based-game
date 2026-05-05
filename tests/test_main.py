@@ -33,6 +33,14 @@ class GestureLogicTests(unittest.TestCase):
         gesture = self.controller._classify(FingerState(False, False, False, False, False))
         self.assertEqual(gesture, Gesture.BRAKE)
 
+    def test_classify_near_open_hand_to_accelerate(self) -> None:
+        gesture = self.controller._classify(FingerState(True, True, True, True, False))
+        self.assertEqual(gesture, Gesture.ACCELERATE)
+
+    def test_classify_near_fist_to_brake(self) -> None:
+        gesture = self.controller._classify(FingerState(False, False, False, False, True))
+        self.assertEqual(gesture, Gesture.BRAKE)
+
     def test_smoothing_requires_threshold_frames(self) -> None:
         self.assertEqual(self.controller._smooth(Gesture.ACCELERATE), Gesture.NEUTRAL)
         self.assertEqual(self.controller._smooth(Gesture.ACCELERATE), Gesture.NEUTRAL)

@@ -4,7 +4,6 @@ import argparse
 import json
 import os
 import re
-import socket
 import subprocess
 import sys
 import threading
@@ -18,7 +17,8 @@ from typing import Iterable
 
 PROJECT_DIR = Path(__file__).resolve().parent
 VENV_PYTHON = PROJECT_DIR / ".venv" / "Scripts" / "python.exe"
-RUNNER_PORT = 8080
+RUNNER_PORT = 8090
+RUNNER_HOST = "0.0.0.0"
 GAME_URL = "https://poki.com/en/g/hill-climb-racing-lite"
 RUNTIME_DIR = PROJECT_DIR / ".runtime"
 STATE_FILE = RUNTIME_DIR / "gesture-state.json"
@@ -35,8 +35,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--preview",
         action=argparse.BooleanOptionalAction,
-        default=False,
-        help="Show webcam preview window (default: disabled for stable browser focus)",
+        default=True,
+        help="Show webcam preview window (default: enabled)",
     )
     parser.add_argument(
         "--ports",
@@ -50,6 +50,11 @@ def parse_args() -> argparse.Namespace:
         help="Preferred local runner port (default: 8080)",
     )
     parser.add_argument(
+        "--runner-host",
+        default=RUNNER_HOST,
+        help="Host/IP to bind local runner (default: 0.0.0.0)",
+    )
+    parser.add_argument(
         "--kill-only",
         action="store_true",
         help="Only stop running processes/ports, do not start the game",
@@ -57,14 +62,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--open",
         choices=("runner", "game", "both"),
-        default="runner",
-        help="Which page to open in browser: local runner, direct game, or both (default: runner)",
+        default="game",
+        help="Which page to open in browser: local runner, direct game, or both (default: game)",
     )
     parser.add_argument(
         "--ui-mode",
         choices=("web", "legacy"),
-        default="web",
-        help="UI mode for launch flow (default: web)",
+        default="legacy",
+        help="UI mode for launch flow (default: legacy)",
     )
     return parser.parse_args()
 
@@ -103,16 +108,6 @@ def get_listening_pids_for_port(port: int) -> set[int]:
     return pids
 
 
-def _port_available(port: int) -> bool:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        try:
-            sock.bind(("127.0.0.1", port))
-        except OSError:
-            return False
-    return True
-
-
 def get_python_listener_pids() -> set[int]:
     result = run(["netstat", "-ano"])
     pids: set[int] = set()
@@ -146,7 +141,7 @@ def kill_known_python_commands() -> None:
         "{ ($_.Name -ieq 'python.exe' -or $_.Name -ieq 'pythonw.exe') "
         f"-and $_.ProcessId -ne {self_pid} "
         "-and ($_.CommandLine -match 'main\\.py' "
-        "-or $_.CommandLine -match 'http\\.server\\s+8080') }; "
+        "-or $_.CommandLine -match 'http\\.server\\s+8090') }; "
         "foreach ($p in $procs) { try { Stop-Process -Id $p.ProcessId -Force -ErrorAction Stop } catch {} }"
     )
     run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps])
@@ -270,23 +265,28 @@ def build_runner_handler(
 
 
 def start_runner(
-    state_file: Path, control_file: Path, frame_file: Path, preferred_port: int
+    state_file: Path,
+    control_file: Path,
+    frame_file: Path,
+    runner_host: str,
+    preferred_port: int,
 ) -> tuple[ThreadingHTTPServer, threading.Thread, int]:
     handler = build_runner_handler(PROJECT_DIR / "web", state_file, control_file, frame_file)
 
     class ReusableThreadingHTTPServer(ThreadingHTTPServer):
         allow_reuse_address = True
 
-    if not _port_available(preferred_port):
-        raise RuntimeError(
-            f"Port {preferred_port} is still busy after cleanup. "
-            "Free that port first, then run again."
-        )
-
-    runner_url = f"http://localhost:{preferred_port}"
+    open_host = "127.0.0.1" if runner_host == "0.0.0.0" else runner_host
+    runner_url = f"http://{open_host}:{preferred_port}"
     print(f"[1/4] Starting local web runner at {runner_url} ...")
 
-    server = ReusableThreadingHTTPServer(("127.0.0.1", preferred_port), handler)
+    try:
+        server = ReusableThreadingHTTPServer((runner_host, preferred_port), handler)
+    except OSError as exc:
+        raise RuntimeError(
+            f"Failed to bind runner on {runner_host}:{preferred_port}. "
+            "Free this exact host/port first, then run again."
+        ) from exc
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     return server, thread, preferred_port
@@ -338,16 +338,17 @@ def run_controller(
         cmd.append("--no-window")
     if args.allow_left_hand:
         cmd.append("--allow-left-hand")
-    cmd.extend(
-        [
-            "--status-file",
-            str(state_file),
-            "--control-file",
-            str(control_file),
-            "--frame-file",
-            str(frame_file),
-        ]
-    )
+    if args.ui_mode == "web":
+        cmd.extend(
+            [
+                "--status-file",
+                str(state_file),
+                "--control-file",
+                str(control_file),
+                "--frame-file",
+                str(frame_file),
+            ]
+        )
 
     try:
         process = subprocess.run(cmd, cwd=PROJECT_DIR)
@@ -367,6 +368,7 @@ def open_pages(open_target: str, runner_url: str) -> None:
 
 def main() -> None:
     args = parse_args()
+    runner_host = args.runner_host.strip() or RUNNER_HOST
     preferred_port = args.runner_port if 1 <= args.runner_port <= 65535 else RUNNER_PORT
     requested_ports = parse_ports(args.ports)
     ports = sorted(set(requested_ports + [preferred_port])) if requested_ports else [preferred_port]
@@ -378,36 +380,49 @@ def main() -> None:
         print("Cleanup complete. Exiting because --kill-only was provided.")
         raise SystemExit(0)
 
-    RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
-    _write_json(STATE_FILE, _default_state())
-    _write_json(CONTROL_FILE, {"enabled": True, "updated_at": time.time()})
+    if args.ui_mode == "web":
+        RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
+        _write_json(STATE_FILE, _default_state())
+        _write_json(CONTROL_FILE, {"enabled": True, "updated_at": time.time()})
 
-    runner, runner_thread, runner_port = start_runner(
-        STATE_FILE, CONTROL_FILE, FRAME_FILE, preferred_port
-    )
-    runner_url = f"http://localhost:{runner_port}"
+        runner, runner_thread, runner_port = start_runner(
+            STATE_FILE, CONTROL_FILE, FRAME_FILE, runner_host, preferred_port
+        )
+        open_host = "127.0.0.1" if runner_host == "0.0.0.0" else runner_host
+        runner_url = f"http://{open_host}:{runner_port}"
+        time.sleep(1)
+        if args.preview:
+            print("[INFO] --preview is ignored in --ui-mode web to keep single-page focus stable.")
+        open_pages(args.open, runner_url)
+        time.sleep(2)
+        try:
+            run_self_check(args.camera_index)
+        except KeyboardInterrupt:
+            print("\n[2/4] Self-check interrupted by user.")
+            raise SystemExit(130)
+
+        exit_code = 0
+        try:
+            exit_code = run_controller(args, STATE_FILE, CONTROL_FILE, FRAME_FILE)
+        except KeyboardInterrupt:
+            print("\n[4/4] Launcher interrupted by user.")
+            exit_code = 130
+        finally:
+            runner.shutdown()
+            runner.server_close()
+            runner_thread.join(timeout=3)
+        raise SystemExit(exit_code)
+
+    # Legacy mode: simple direct game + controller flow, no local web runner.
+    open_pages(args.open, f"http://127.0.0.1:{preferred_port}")
     time.sleep(1)
-    if args.ui_mode == "web" and args.preview:
-        print("[INFO] --preview is ignored in --ui-mode web to keep single-page focus stable.")
-    open_pages(args.open, runner_url)
-    time.sleep(2)
     try:
         run_self_check(args.camera_index)
     except KeyboardInterrupt:
         print("\n[2/4] Self-check interrupted by user.")
         raise SystemExit(130)
 
-    exit_code = 0
-    try:
-        exit_code = run_controller(args, STATE_FILE, CONTROL_FILE, FRAME_FILE)
-    except KeyboardInterrupt:
-        print("\n[4/4] Launcher interrupted by user.")
-        exit_code = 130
-    finally:
-        runner.shutdown()
-        runner.server_close()
-        runner_thread.join(timeout=3)
-    raise SystemExit(exit_code)
+    raise SystemExit(run_controller(args, STATE_FILE, CONTROL_FILE, FRAME_FILE))
 
 
 if __name__ == "__main__":

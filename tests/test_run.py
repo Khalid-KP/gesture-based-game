@@ -9,14 +9,14 @@ class RunCliTests(unittest.TestCase):
         ports = run.parse_ports("8080, -1, abc, 65536, 5000 8080")
         self.assertEqual(ports, [5000, 8080])
 
-    def test_default_ui_mode_is_web(self) -> None:
+    def test_default_ui_mode_is_legacy(self) -> None:
         old_argv = sys.argv
         try:
             sys.argv = ["run.py"]
             args = run.parse_args()
         finally:
             sys.argv = old_argv
-        self.assertEqual(args.ui_mode, "web")
+        self.assertEqual(args.ui_mode, "legacy")
 
 
 if __name__ == "__main__":

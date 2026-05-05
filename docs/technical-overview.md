@@ -8,7 +8,7 @@ This project turns one-hand gestures captured from a webcam into keyboard contro
 - Fist -> hold `Left Arrow` (brake)
 - Transitional/unknown gesture -> release both keys (safety neutral)
 
-The runtime is optimized for a browser-first gameplay flow using a local web runner and a Python gesture engine.
+The runtime is optimized for direct gameplay control (game tab + webcam controller concurrently), with optional web runner mode.
 
 ## 2) Core Stack
 
@@ -24,9 +24,9 @@ The runtime is optimized for a browser-first gameplay flow using a local web run
 
 1. **Launcher** (`run.py`)
    - Cleans previous sessions/processes
-   - Starts local web server (`http://localhost:8080`)
    - Runs preflight self-check
    - Starts gesture controller process
+   - Optionally starts local web server (`http://localhost:8090`) in web mode
 
 2. **Gesture Engine** (`main.py`)
    - Captures camera frames
@@ -36,12 +36,12 @@ The runtime is optimized for a browser-first gameplay flow using a local web run
    - Sends keyboard actions
    - Publishes runtime state + frame snapshots for the web UI
 
-3. **Browser UI** (`web/index.html`)
+3. **Browser UI** (`web/index.html`, optional web mode)
    - Displays game iframe
    - Displays webcam preview (from backend frame stream)
    - Polls live state endpoint
    - Toggles controller ON/OFF
-   - Applies blur/visibility safety behavior
+   - Provides fallback action when game embedding is blocked
 
 ## 4) Gesture Algorithm
 
@@ -68,8 +68,8 @@ This produces a `FingerState` object:
 
 Rule-based classifier maps finger states to game intent:
 
-- `open_count == 5` -> `ACCELERATING`
-- `open_count == 0` -> `BRAKING`
+- `open_count >= 4` -> `ACCELERATING`
+- `open_count <= 1` -> `BRAKING`
 - otherwise -> `NEUTRAL`
 
 This deterministic mapping avoids ambiguous mixed gestures triggering accidental key presses.
@@ -111,10 +111,9 @@ This acts as a small finite-state controller and prevents stuck-key behavior dur
 
 Safety mechanisms include:
 
-- **Neutral fallback** on non-open/non-fist gestures
+- **Neutral fallback** on mid-state gestures (`open_count` in `[2, 3]`)
 - **Right-hand-only filter** by default (reduces false triggers)
 - UI control toggle (`enabled`) that forces key release when OFF
-- Browser blur/visibility handlers set control OFF on focus loss
 - Final cleanup on shutdown always releases keys
 
 ## 8) Runtime Data Bridge (Web Mode)
@@ -163,21 +162,27 @@ UI polling intervals (current defaults in page script):
 
 ### Launcher (`run.py`)
 
-- `--ports` (default `"8080"`)  
+- `--ports` (default `"8090"`)  
   Comma-separated ports to free before restart.
+
+- `--runner-host` (default `"0.0.0.0"`)  
+  Host/IP used to bind the optional local web runner.
+
+- `--runner-port` (default `8090`)  
+  Port used by optional local web runner mode.
 
 - `--kill-only`  
   Cleanup without starting runner/controller.
 
-- `--open {runner,game,both}` (default `runner`)  
+- `--open {runner,game,both}` (default `game`)  
   Controls which page(s) to open in browser.
 
-- `--ui-mode {web,legacy}` (default `web`)  
-  `web`: single-page browser flow  
-  `legacy`: allows old OpenCV-preview style (with `--preview`)
+- `--ui-mode {web,legacy}` (default `legacy`)  
+  `legacy`: direct game + OpenCV preview flow  
+  `web`: optional single-page runner flow
 
-- `--preview/--no-preview` (default `False`)  
-  Effective in legacy mode; web mode keeps no-window behavior for focus stability.
+- `--preview/--no-preview` (default `True`)  
+  Controls OpenCV preview visibility (legacy mode).
 
 ## 10) Validation Strategy
 
@@ -195,8 +200,8 @@ UI polling intervals (current defaults in page script):
    - MediaPipe Hands initialization
 
 4. **Manual E2E**
-   - Enable control in runner UI
-   - Focus game iframe/tab
+   - Launch `python run.py`
+   - Keep game tab focused
    - Verify open hand / fist / neutral behavior live
 
 ## 11) Known Trade-offs

@@ -24,47 +24,46 @@ pip install -r requirements.txt
 
 If you already had the environment from an older install, run `pip install -r requirements.txt --upgrade` once to align package versions.
 
-## Run
+## Run (Recommended)
 
 ```bash
 python run.py
 ```
 
-Direct controller mode (without launcher):
+Default launcher behavior:
+
+- Open the game page directly in browser
+- Run a quick `--self-check`
+- Start the gesture controller with webcam preview enabled
+- Keep keyboard control active while you play in the game tab
+
+## Direct Controller Only
 
 ```bash
-python main.py
+python main.py --camera-index 0 --confidence 0.7 --smooth-frames 4
 ```
 
-`python run.py` will:
+Use this if you want only the controller process without launcher automation.
 
-- Open a local web runner at `http://localhost:8080` with the game embedded
-- Run a quick `--self-check`
-- Start the gesture controller in `--no-window` mode for better keyboard sync
-- Stream live webcam preview/state into the same web page (`/api/frame`, `/api/state`)
-
-Use CLI flags on `run.py` to tune camera index, confidence, smoothing, or allow-left-hand behavior.
-
-Optional flags:
+## Useful Launcher Flags
 
 ```bash
-python run.py --ui-mode legacy --preview
+python run.py --preview
+python run.py --ui-mode web
+python run.py --runner-port 8090 --ports 8090
 python run.py --open both
 python run.py --kill-only
-python main.py --camera-index 0 --confidence 0.7 --smooth-frames 4
-python main.py --allow-left-hand
-python main.py --self-check
-python main.py --no-window
+python run.py --allow-left-hand
 ```
 
 ## Runtime Notes
 
-- Launcher default (`--ui-mode web`) keeps one-page mode and ignores `--preview`.
-- Use `python run.py --ui-mode legacy --preview` only for old OpenCV-window workflow.
-- Keep the game tab/window focused when control is ON.
-- In legacy preview mode, press `t` to toggle input ON/OFF.
-- In legacy preview mode, press `q` or `Esc` to quit.
-- In no-window mode, stop from terminal with `Ctrl+C`.
+- Default mode is `legacy`, optimized for "open game + run webcam controller concurrently".
+- Web mode (`--ui-mode web`) is optional and starts a local runner server.
+- Keep the game tab/window focused for keyboard input capture.
+- Press `t` in preview window to toggle control ON/OFF.
+- Press `q` or `Esc` in preview window to quit.
+- Press `Ctrl+C` in terminal to stop launcher/controller.
 
 ## Validation
 
@@ -88,7 +87,7 @@ Manual checks (required for final gameplay validation):
 ## Recommended Play Layout
 
 1. Start `python run.py`.
-2. Open `http://localhost:8080` if it did not auto-open.
-3. Wait for webcam preview to appear in the left panel.
-4. Click `Enable Control`, then `Focus Game`.
-5. Keep this tab focused and play with hand gestures.
+2. Wait for webcam preview window to appear.
+3. Place preview where you can see it while playing.
+4. Keep the game tab/window focused.
+5. Use open-hand and fist gestures to drive and brake.

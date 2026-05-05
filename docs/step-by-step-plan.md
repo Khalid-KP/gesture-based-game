@@ -45,7 +45,10 @@ Status: DONE
 Completion notes:
 
 - Finger state inference uses MediaPipe landmark geometry for all five fingers
-- Gesture mapping now follows exact phase rules: open hand -> `ACCELERATING`, fist -> `BRAKING`, otherwise `NEUTRAL`
+- Gesture mapping is tolerance-based for runtime reliability:
+  - `open_count >= 4` -> `ACCELERATING`
+  - `open_count <= 1` -> `BRAKING`
+  - otherwise `NEUTRAL`
 - Temporal smoothing is applied via frame streak threshold (`--smooth-frames`)
 
 ## Phase 4 - Keyboard Output
@@ -81,6 +84,7 @@ Completion notes:
 - OpenCV panel uses normal window mode with explicit left-side placement and resizable behavior.
 - Overlay renders mode state, detected hand label, and current stable action.
 - Quit flow supports both `q` and `Esc` with cleanup that releases keys and closes windows.
+- Default launch path is now legacy direct control flow (`python run.py`) with game + webcam controller running concurrently.
 
 ## Phase 6 - Validation
 
