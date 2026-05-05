@@ -49,6 +49,10 @@ class CliTests(unittest.TestCase):
         args = parse_args(["--self-check"])
         self.assertTrue(args.self_check)
 
+    def test_no_window_flag(self) -> None:
+        args = parse_args(["--no-window"])
+        self.assertTrue(args.no_window)
+
 
 if __name__ == "__main__":
     unittest.main()

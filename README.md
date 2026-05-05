@@ -30,12 +30,27 @@ If you already had the environment from an older install, run `pip install -r re
 python main.py
 ```
 
+One-click launcher (Windows):
+
+```bash
+run_game.bat
+```
+
+`run_game.bat` will:
+
+- Open a local web runner at `http://localhost:8080` with the game embedded
+- Run a quick `--self-check`
+- Start the gesture controller in `--no-window` mode for better keyboard sync
+
+Edit the values at the top of `run_game.bat` to change camera index, confidence, smoothing, or allow-left-hand behavior.
+
 Optional flags:
 
 ```bash
 python main.py --camera-index 0 --confidence 0.7 --smooth-frames 4
 python main.py --allow-left-hand
 python main.py --self-check
+python main.py --no-window
 ```
 
 ## Runtime Notes

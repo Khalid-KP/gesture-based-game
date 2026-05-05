@@ -120,14 +120,15 @@ class GestureController:
         self.enabled = True
         self.last_toggle = 0.0
 
-    def run(self, camera_index: int = 0) -> None:
+    def run(self, camera_index: int = 0, show_window: bool = True) -> None:
         cap = cv2.VideoCapture(camera_index)
         if not cap.isOpened():
             raise RuntimeError("Could not open webcam. Check camera permissions and index.")
 
-        cv2.namedWindow("Gesture Controller", cv2.WINDOW_NORMAL)
-        cv2.resizeWindow("Gesture Controller", 460, 700)
-        cv2.moveWindow("Gesture Controller", 10, 60)
+        if show_window:
+            cv2.namedWindow("Gesture Controller", cv2.WINDOW_NORMAL)
+            cv2.resizeWindow("Gesture Controller", 460, 700)
+            cv2.moveWindow("Gesture Controller", 10, 60)
 
         try:
             while True:
@@ -144,23 +145,25 @@ class GestureController:
                 else:
                     self.key_driver.release_all()
 
-                panel = self._build_panel(annotated, stable_gesture, handedness_label)
-                cv2.imshow("Gesture Controller", panel)
+                if show_window:
+                    panel = self._build_panel(annotated, stable_gesture, handedness_label)
+                    cv2.imshow("Gesture Controller", panel)
 
-                pressed = cv2.waitKey(1) & 0xFF
-                if pressed in (ord("q"), 27):
-                    break
-                if pressed == ord("t"):
-                    now = time.time()
-                    if now - self.last_toggle > 0.25:
-                        self.enabled = not self.enabled
-                        self.last_toggle = now
-                        if not self.enabled:
-                            self.key_driver.release_all()
+                    pressed = cv2.waitKey(1) & 0xFF
+                    if pressed in (ord("q"), 27):
+                        break
+                    if pressed == ord("t"):
+                        now = time.time()
+                        if now - self.last_toggle > 0.25:
+                            self.enabled = not self.enabled
+                            self.last_toggle = now
+                            if not self.enabled:
+                                self.key_driver.release_all()
         finally:
             self.key_driver.release_all()
             cap.release()
-            cv2.destroyAllWindows()
+            if show_window:
+                cv2.destroyAllWindows()
 
     def _process_frame(self, frame) -> Tuple[Gesture, str, Any]:
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -361,6 +364,11 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         action="store_true",
         help="Run environment/camera checks and exit",
     )
+    parser.add_argument(
+        "--no-window",
+        action="store_true",
+        help="Run without OpenCV window (keeps browser focus stable)",
+    )
     return parser.parse_args(argv)
 
 
@@ -374,7 +382,7 @@ def main() -> None:
         smooth_frames=args.smooth_frames,
         use_right_hand_only=not args.allow_left_hand,
     )
-    controller.run(camera_index=args.camera_index)
+    controller.run(camera_index=args.camera_index, show_window=not args.no_window)
 
 
 if __name__ == "__main__":
