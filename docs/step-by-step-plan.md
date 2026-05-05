@@ -88,11 +88,25 @@ Completion notes:
 2. Test with Hill Climb Racing Lite in focused browser window.
 3. Tune confidence and smoothing if needed.
 
+Completion notes:
+
+- Added automated validation commands:
+  - `.venv\Scripts\python.exe -m py_compile main.py`
+  - `.venv\Scripts\python.exe -m unittest discover -s tests -v`
+- Added unit tests for finger-state logic, gesture classification, smoothing threshold, and CLI parsing.
+- Manual gameplay validation in Notepad + browser still required on target machine.
+
 ## Phase 7 - Push-Ready Checks
 
 1. Verify script runs without syntax errors.
 2. Ensure docs are clear and complete.
 3. Keep commit clean and scoped to MVP.
+
+Completion notes:
+
+- Syntax verification is automated with `py_compile`.
+- Docs now include an explicit validation section (automated + manual checks).
+- Commit scope remains limited to reliability, test coverage, and validation docs.
 
 ---
 
@@ -123,12 +137,13 @@ Completion notes:
   - [x] Status box (mode, hand, state)
   - [x] Quit shortcuts (`q` / `Esc`)
 
-- [ ] Phase 6 - Validation
-  - [ ] Notepad key-behavior sanity test
-  - [ ] Hill Climb Racing Lite focused-window test
-  - [ ] Confidence/smoothing tuning pass
+- [~] Phase 6 - Validation
+  - [ ] Notepad key-behavior sanity test (manual)
+  - [ ] Hill Climb Racing Lite focused-window test (manual)
+  - [ ] Confidence/smoothing tuning pass (manual)
+  - [x] Automated validation checks added and passing
 
-- [ ] Phase 7 - Push-Ready Checks
-  - [ ] Final syntax/run verification pass
-  - [ ] Final docs polish pass
-  - [ ] Commit hygiene review
+- [x] Phase 7 - Push-Ready Checks
+  - [x] Final syntax/run verification pass
+  - [x] Final docs polish pass
+  - [x] Commit hygiene review

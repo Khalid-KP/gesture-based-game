@@ -2,11 +2,16 @@ import argparse
 import time
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional, Tuple
+from typing import Any, Optional, Sequence, Tuple
 
 import cv2
 import mediapipe as mp
-from pynput.keyboard import Controller, Key
+
+try:
+    from pynput.keyboard import Controller, Key
+except Exception:  # pragma: no cover - environment-specific import failure.
+    Controller = None
+    Key = None
 
 
 class Gesture(str, Enum):
@@ -46,6 +51,11 @@ class FingerState:
 
 class KeyDriver:
     def __init__(self) -> None:
+        if Controller is None or Key is None:
+            raise RuntimeError(
+                "Keyboard control is unavailable. Ensure pynput is installed and the "
+                "OS allows keyboard event injection."
+            )
         self.keyboard = Controller()
         self.pressed_right = False
         self.pressed_left = False
@@ -152,7 +162,7 @@ class GestureController:
             cap.release()
             cv2.destroyAllWindows()
 
-    def _process_frame(self, frame) -> Tuple[Gesture, str, any]:
+    def _process_frame(self, frame) -> Tuple[Gesture, str, Any]:
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         result = self.hands.process(rgb)
         handedness = "None"
@@ -269,7 +279,7 @@ class GestureController:
         return panel
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="One-hand gesture controller for Hill Climb Racing Lite"
     )
@@ -296,7 +306,7 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Disable right-hand-only filter",
     )
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def main() -> None:

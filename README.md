@@ -42,6 +42,24 @@ python main.py --allow-left-hand
 - Press `t` to toggle input ON/OFF.
 - Press `q` or `Esc` to quit.
 
+## Validation
+
+Automated checks:
+
+```bash
+.venv\Scripts\python.exe -m py_compile main.py
+.venv\Scripts\python.exe -m unittest discover -s tests -v
+```
+
+Manual checks (required for final gameplay validation):
+
+1. Start the app and verify key behavior in Notepad:
+   - Open hand types/holds Right Arrow navigation behavior.
+   - Fist types/holds Left Arrow navigation behavior.
+   - Transitional gestures release both keys.
+2. Focus Hill Climb Racing Lite and verify the same behavior in-game.
+3. Tune `--confidence` and `--smooth-frames` for your lighting and camera.
+
 ## Recommended Play Layout
 
 1. Open Hill Climb Racing Lite in browser.
