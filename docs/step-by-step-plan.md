@@ -12,6 +12,7 @@ Status: DONE
 3. Confirm webcam opens and can render a live frame.
 
 Completion notes:
+
 - Virtual environment created at `.venv/`
 - Dependencies installed successfully via `requirements.txt`
 - Webcam smoke test result: `CAM_OPEN True`
@@ -25,11 +26,14 @@ Status: DONE
 3. Restrict to right hand for one-hand MVP.
 
 Completion notes:
+
 - Configured `max_num_hands=1` in `main.py`
 - Rendering hand landmarks with MediaPipe drawing utilities
 - Right-hand-only filtering enabled by default (`--allow-left-hand` to override)
 
 ## Phase 3 - Gesture Classification
+
+Status: DONE
 
 1. Infer finger open/closed states from landmark geometry.
 2. Classify:
@@ -37,6 +41,12 @@ Completion notes:
    - Fist -> BRAKING
    - Anything else -> NEUTRAL
 3. Add frame smoothing to reduce flicker and unstable switching.
+
+Completion notes:
+
+- Finger state inference uses MediaPipe landmark geometry for all five fingers
+- Gesture mapping now follows exact phase rules: open hand -> `ACCELERATING`, fist -> `BRAKING`, otherwise `NEUTRAL`
+- Temporal smoothing is applied via frame streak threshold (`--smooth-frames`)
 
 ## Phase 4 - Keyboard Output
 

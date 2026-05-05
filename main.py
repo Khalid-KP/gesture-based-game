@@ -35,6 +35,14 @@ class FingerState:
             ]
         )
 
+    @property
+    def is_open_hand(self) -> bool:
+        return self.open_count == 5
+
+    @property
+    def is_fist(self) -> bool:
+        return self.open_count == 0
+
 
 class KeyDriver:
     def __init__(self) -> None:
@@ -189,9 +197,9 @@ class GestureController:
         )
 
     def _classify(self, fingers: FingerState) -> Gesture:
-        if fingers.open_count >= 4:
+        if fingers.is_open_hand:
             return Gesture.ACCELERATE
-        if fingers.open_count <= 1:
+        if fingers.is_fist:
             return Gesture.BRAKE
         return Gesture.NEUTRAL
 
