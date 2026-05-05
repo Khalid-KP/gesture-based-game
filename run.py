@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import re
+import socket
 import subprocess
 import sys
 import threading
@@ -18,7 +19,6 @@ from typing import Iterable
 PROJECT_DIR = Path(__file__).resolve().parent
 VENV_PYTHON = PROJECT_DIR / ".venv" / "Scripts" / "python.exe"
 RUNNER_PORT = 8080
-RUNNER_URL = f"http://localhost:{RUNNER_PORT}"
 GAME_URL = "https://poki.com/en/g/hill-climb-racing-lite"
 RUNTIME_DIR = PROJECT_DIR / ".runtime"
 STATE_FILE = RUNTIME_DIR / "gesture-state.json"
@@ -42,6 +42,12 @@ def parse_args() -> argparse.Namespace:
         "--ports",
         default=str(RUNNER_PORT),
         help="Comma-separated ports to free before restart (example: 8080,5000)",
+    )
+    parser.add_argument(
+        "--runner-port",
+        type=int,
+        default=RUNNER_PORT,
+        help="Preferred local runner port (default: 8080)",
     )
     parser.add_argument(
         "--kill-only",
@@ -95,6 +101,16 @@ def get_listening_pids_for_port(port: int) -> set[int]:
         if match:
             pids.add(int(match.group(1)))
     return pids
+
+
+def _port_available(port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            sock.bind(("127.0.0.1", port))
+        except OSError:
+            return False
+    return True
 
 
 def get_python_listener_pids() -> set[int]:
@@ -194,24 +210,33 @@ def build_runner_handler(
             if self.path == "/api/state":
                 payload = _read_json(state_file, _default_state())
                 body = json.dumps(payload).encode("utf-8")
-                self.send_response(HTTPStatus.OK)
-                self.send_header("Content-Type", "application/json; charset=utf-8")
-                self.send_header("Cache-Control", "no-store")
-                self.send_header("Content-Length", str(len(body)))
-                self.end_headers()
-                self.wfile.write(body)
+                try:
+                    self.send_response(HTTPStatus.OK)
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    self.send_header("Cache-Control", "no-store")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                    return
                 return
             if self.path.startswith("/api/frame"):
                 if not frame_file.exists():
-                    self.send_error(HTTPStatus.SERVICE_UNAVAILABLE, "Frame not ready")
+                    # Frame is expected to be unavailable during startup. Return empty quickly.
+                    self.send_response(HTTPStatus.NO_CONTENT)
+                    self.send_header("Cache-Control", "no-store")
+                    self.end_headers()
                     return
                 body = frame_file.read_bytes()
-                self.send_response(HTTPStatus.OK)
-                self.send_header("Content-Type", "image/jpeg")
-                self.send_header("Cache-Control", "no-store")
-                self.send_header("Content-Length", str(len(body)))
-                self.end_headers()
-                self.wfile.write(body)
+                try:
+                    self.send_response(HTTPStatus.OK)
+                    self.send_header("Content-Type", "image/jpeg")
+                    self.send_header("Cache-Control", "no-store")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                    return
                 return
             return super().do_GET()
 
@@ -231,28 +256,40 @@ def build_runner_handler(
             state = _read_json(state_file, _default_state())
             state["enabled"] = enabled
             body = json.dumps(state).encode("utf-8")
-            self.send_response(HTTPStatus.OK)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
-            self.send_header("Cache-Control", "no-store")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
+            try:
+                self.send_response(HTTPStatus.OK)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+            except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                return
 
     return RunnerHandler
 
 
 def start_runner(
-    state_file: Path, control_file: Path, frame_file: Path
-) -> tuple[ThreadingHTTPServer, threading.Thread]:
-    print(f"[1/4] Starting local web runner at {RUNNER_URL} ...")
+    state_file: Path, control_file: Path, frame_file: Path, preferred_port: int
+) -> tuple[ThreadingHTTPServer, threading.Thread, int]:
     handler = build_runner_handler(PROJECT_DIR / "web", state_file, control_file, frame_file)
+
     class ReusableThreadingHTTPServer(ThreadingHTTPServer):
         allow_reuse_address = True
 
-    server = ReusableThreadingHTTPServer(("127.0.0.1", RUNNER_PORT), handler)
+    if not _port_available(preferred_port):
+        raise RuntimeError(
+            f"Port {preferred_port} is still busy after cleanup. "
+            "Free that port first, then run again."
+        )
+
+    runner_url = f"http://localhost:{preferred_port}"
+    print(f"[1/4] Starting local web runner at {runner_url} ...")
+
+    server = ReusableThreadingHTTPServer(("127.0.0.1", preferred_port), handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
-    return server, thread
+    return server, thread, preferred_port
 
 
 def run_self_check(camera_index: int) -> None:
@@ -321,16 +358,18 @@ def run_controller(
     return process.returncode
 
 
-def open_pages(open_target: str) -> None:
+def open_pages(open_target: str, runner_url: str) -> None:
     if open_target in {"runner", "both"}:
-        webbrowser.open(RUNNER_URL)
+        webbrowser.open(runner_url)
     if open_target in {"game", "both"}:
         webbrowser.open(GAME_URL)
 
 
 def main() -> None:
     args = parse_args()
-    ports = parse_ports(args.ports) or [RUNNER_PORT]
+    preferred_port = args.runner_port if 1 <= args.runner_port <= 65535 else RUNNER_PORT
+    requested_ports = parse_ports(args.ports)
+    ports = sorted(set(requested_ports + [preferred_port])) if requested_ports else [preferred_port]
 
     ensure_venv_python()
     cleanup(ports)
@@ -343,11 +382,14 @@ def main() -> None:
     _write_json(STATE_FILE, _default_state())
     _write_json(CONTROL_FILE, {"enabled": True, "updated_at": time.time()})
 
-    runner, runner_thread = start_runner(STATE_FILE, CONTROL_FILE, FRAME_FILE)
+    runner, runner_thread, runner_port = start_runner(
+        STATE_FILE, CONTROL_FILE, FRAME_FILE, preferred_port
+    )
+    runner_url = f"http://localhost:{runner_port}"
     time.sleep(1)
     if args.ui_mode == "web" and args.preview:
         print("[INFO] --preview is ignored in --ui-mode web to keep single-page focus stable.")
-    open_pages(args.open)
+    open_pages(args.open, runner_url)
     time.sleep(2)
     try:
         run_self_check(args.camera_index)

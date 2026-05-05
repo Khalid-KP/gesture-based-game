@@ -105,11 +105,39 @@
         background: #171921;
         color: #cbd3e2;
       }
+      .gameHost {
+        position: relative;
+      }
       iframe {
         width: 100%;
         height: 100%;
         border: 0;
         background: #000;
+      }
+      .overlay {
+        position: absolute;
+        inset: 0;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        background: rgba(8, 10, 14, 0.88);
+        z-index: 2;
+      }
+      .overlayCard {
+        max-width: 520px;
+        padding: 16px;
+        border-radius: 10px;
+        background: #1b1f2a;
+        border: 1px solid #2f3550;
+        color: #d8def0;
+      }
+      .overlay.show {
+        display: flex;
+      }
+      .actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 12px;
       }
       ol {
         margin: 8px 0 0 20px;
@@ -165,12 +193,27 @@
         <span>Hill Climb Racing Lite</span>
         <span>Stop everything with <code>Ctrl+C</code> in terminal</span>
       </div>
-      <iframe
-        id="gameFrame"
-        src="https://poki.com/en/g/hill-climb-racing-lite"
-        title="Hill Climb Racing Lite"
-        allow="autoplay; fullscreen"
-      ></iframe>
+      <div class="gameHost">
+        <div id="embedFallback" class="overlay">
+          <div class="overlayCard">
+            <div><b>Embedded game blocked by browser policy</b></div>
+            <div style="margin-top: 8px">
+              Poki sometimes blocks third-party iframe embedding. Open the game in a separate tab and keep that tab focused for keyboard control.
+            </div>
+            <div class="actions">
+              <button id="openGameBtn">Open Game in New Tab</button>
+              <button id="hideFallbackBtn" class="secondary">Dismiss</button>
+            </div>
+          </div>
+        </div>
+        <iframe
+          id="gameFrame"
+          src="https://games.poki.com/458768/1900a95d-1c74-49c8-b752-b88fe2e67501?tag=pg-06d11b38426098c330a06d54d3f435f959a1007e&site_id=3&iso_lang=en&country=BD&poki_url=https://poki.com/en/g/hill-climb-racing-lite&hoist=yes&nonPersonalized=n&cloudsavegames=n&familyFriendly=n&device=desktop&categories=1,9,78,893,929,1126,1140,1141,1190&ab=62bf43cb6f3c0ee4f5793a64ff6e7f1577668e0f&experiment=control-ae0c885e&special_condition=landing&user_id=afmZBaIPZRgUiKtP1HhnQA"
+          title="Hill Climb Racing Lite"
+          allow="autoplay; fullscreen; gamepad; clipboard-write; web-share"
+          sandbox="allow-forms allow-modals allow-orientation-lock allow-pointer-lock allow-popups allow-popups-to-escape-sandbox allow-presentation allow-scripts allow-same-origin allow-downloads"
+        ></iframe>
+      </div>
     </section>
 
     <script>
@@ -178,9 +221,13 @@
       const gameFrame = document.getElementById("gameFrame");
       const toggleControlBtn = document.getElementById("toggleControlBtn");
       const focusGameBtn = document.getElementById("focusGameBtn");
+      const openGameBtn = document.getElementById("openGameBtn");
+      const hideFallbackBtn = document.getElementById("hideFallbackBtn");
+      const embedFallback = document.getElementById("embedFallback");
       const stateText = document.getElementById("stateText");
       const detailText = document.getElementById("detailText");
       const focusText = document.getElementById("focusText");
+      const publicGameUrl = "https://poki.com/en/g/hill-climb-racing-lite";
 
       let controlEnabled = false;
 
@@ -239,6 +286,12 @@
         gameFrame.focus();
         updateFocusState();
       });
+      openGameBtn.addEventListener("click", () => {
+        window.open(publicGameUrl, "_blank", "noopener,noreferrer");
+      });
+      hideFallbackBtn.addEventListener("click", () => {
+        embedFallback.classList.remove("show");
+      });
 
       window.addEventListener("blur", () => {
         updateFocusState();
@@ -253,6 +306,13 @@
       updateFocusState();
       void syncState();
       refreshFrame();
+      // If iframe load does not settle quickly, show manual fallback.
+      const fallbackTimer = setTimeout(() => {
+        embedFallback.classList.add("show");
+      }, 5500);
+      gameFrame.addEventListener("load", () => {
+        clearTimeout(fallbackTimer);
+      });
       setInterval(syncState, 200);
       setInterval(refreshFrame, 150);
     </script>
