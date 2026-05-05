@@ -5,35 +5,105 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Gesture Game Runner</title>
     <style>
+      :root {
+        color-scheme: dark;
+      }
+      * {
+        box-sizing: border-box;
+      }
       body {
         margin: 0;
         font-family: Arial, sans-serif;
-        background: #111;
+        background: #101114;
         color: #f3f3f3;
         display: grid;
-        grid-template-columns: 320px 1fr;
+        grid-template-columns: 360px 1fr;
         height: 100vh;
+        overflow: hidden;
       }
       .sidebar {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
         padding: 16px;
-        border-right: 1px solid #2a2a2a;
-        background: #181818;
+        border-right: 1px solid #272a31;
+        background: #16181d;
       }
       h1 {
         font-size: 20px;
-        margin: 0 0 12px 0;
+        margin: 0;
       }
-      p,
-      li {
-        color: #d0d0d0;
+      .muted {
+        color: #c8cdd6;
         line-height: 1.4;
       }
-      .status {
-        margin: 12px 0;
+      .card {
+        background: #1d2028;
+        border: 1px solid #2b3040;
+        border-radius: 10px;
         padding: 10px;
+      }
+      .camera {
+        width: 100%;
+        aspect-ratio: 4 / 3;
         border-radius: 8px;
-        background: #202020;
-        border: 1px solid #313131;
+        border: 1px solid #2f3545;
+        object-fit: cover;
+        transform: scaleX(-1);
+        background: #0d0f14;
+      }
+      .statusValue {
+        margin-top: 8px;
+        font-size: 24px;
+        font-weight: 700;
+        letter-spacing: 0.3px;
+      }
+      .state-ACCELERATING {
+        color: #7fe787;
+      }
+      .state-BRAKING {
+        color: #ffb35f;
+      }
+      .state-NEUTRAL {
+        color: #d3d8e2;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      button {
+        border: 1px solid #3a4360;
+        background: #24314f;
+        color: #f1f5ff;
+        border-radius: 8px;
+        padding: 10px 12px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button.secondary {
+        background: #20242f;
+      }
+      .focusOk {
+        color: #7fe787;
+      }
+      .focusWarn {
+        color: #ffb35f;
+      }
+      .gameWrap {
+        display: grid;
+        grid-template-rows: 42px 1fr;
+        min-width: 0;
+      }
+      .bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 14px;
+        border-bottom: 1px solid #272a31;
+        background: #171921;
+        color: #cbd3e2;
       }
       iframe {
         width: 100%;
@@ -41,34 +111,150 @@
         border: 0;
         background: #000;
       }
-      code {
-        background: #222;
-        padding: 2px 6px;
-        border-radius: 4px;
+      ol {
+        margin: 8px 0 0 20px;
+      }
+      li {
+        margin-bottom: 6px;
       }
     </style>
   </head>
   <body>
     <aside class="sidebar">
       <h1>Gesture Game Runner</h1>
-      <div class="status">
-        Controller runs in no-window mode for better keyboard sync.
+      <p class="muted">Single page control: webcam + live state + game.</p>
+
+      <div class="card">
+        <img id="camera" class="camera" alt="Live webcam preview from controller" />
+        <div class="muted" style="margin-top: 8px">
+          Preview is streamed from the running Python controller.
+        </div>
       </div>
-      <p>Quick steps:</p>
-      <ol>
-        <li>Click once inside the game area to focus it.</li>
-        <li>Use open hand = accelerate, fist = brake.</li>
-        <li>Keep this browser tab active while playing.</li>
-      </ol>
-      <p>
-        To stop controller, close the launcher terminal or press
-        <code>Ctrl + C</code> there.
-      </p>
+
+      <div class="card">
+        <div class="row">
+          <div>Controller</div>
+          <button id="toggleControlBtn">Enable Control</button>
+        </div>
+        <div id="stateText" class="statusValue state-NEUTRAL">NEUTRAL</div>
+        <div class="muted" id="detailText">Hand: None | Mode: OFF</div>
+      </div>
+
+      <div class="card">
+        <div class="row">
+          <div>Game Focus</div>
+          <button id="focusGameBtn" class="secondary">Focus Game</button>
+        </div>
+        <div id="focusText" class="muted focusWarn" style="margin-top: 8px">
+          Click Focus Game and keep this tab active.
+        </div>
+      </div>
+
+      <div class="card muted">
+        <b>Quick flow</b>
+        <ol>
+          <li>Wait for live preview</li>
+          <li>Enable Control</li>
+          <li>Focus Game and play</li>
+        </ol>
+      </div>
     </aside>
-    <iframe
-      src="https://poki.com/en/g/hill-climb-racing-lite"
-      title="Hill Climb Racing Lite"
-      allow="autoplay; fullscreen"
-    ></iframe>
+
+    <section class="gameWrap">
+      <div class="bar">
+        <span>Hill Climb Racing Lite</span>
+        <span>Stop everything with <code>Ctrl+C</code> in terminal</span>
+      </div>
+      <iframe
+        id="gameFrame"
+        src="https://poki.com/en/g/hill-climb-racing-lite"
+        title="Hill Climb Racing Lite"
+        allow="autoplay; fullscreen"
+      ></iframe>
+    </section>
+
+    <script>
+      const camera = document.getElementById("camera");
+      const gameFrame = document.getElementById("gameFrame");
+      const toggleControlBtn = document.getElementById("toggleControlBtn");
+      const focusGameBtn = document.getElementById("focusGameBtn");
+      const stateText = document.getElementById("stateText");
+      const detailText = document.getElementById("detailText");
+      const focusText = document.getElementById("focusText");
+
+      let controlEnabled = false;
+
+      async function setControl(enabled) {
+        const res = await fetch("/api/control", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ enabled }),
+        });
+        if (!res.ok) throw new Error("Failed to update control mode");
+        controlEnabled = enabled;
+        toggleControlBtn.textContent = enabled ? "Disable Control" : "Enable Control";
+      }
+
+      async function syncState() {
+        try {
+          const res = await fetch("/api/state", { cache: "no-store" });
+          if (!res.ok) return;
+          const state = await res.json();
+          const current = state.stable_gesture || "NEUTRAL";
+          controlEnabled = !!state.enabled;
+          stateText.textContent = current;
+          stateText.className = "statusValue state-" + current;
+          detailText.textContent = `Hand: ${state.handedness || "None"} | Mode: ${
+            controlEnabled ? "ON" : "OFF"
+          }`;
+          toggleControlBtn.textContent = controlEnabled ? "Disable Control" : "Enable Control";
+        } catch (_err) {
+          detailText.textContent = "Controller service disconnected";
+        }
+      }
+
+      function refreshFrame() {
+        camera.src = "/api/frame?t=" + Date.now();
+      }
+
+      function updateFocusState() {
+        if (document.hasFocus()) {
+          focusText.textContent = "Focused. Keep the game active.";
+          focusText.className = "muted focusOk";
+        } else {
+          focusText.textContent = "Focus lost. Control auto-disabled for safety.";
+          focusText.className = "muted focusWarn";
+        }
+      }
+
+      toggleControlBtn.addEventListener("click", async () => {
+        try {
+          await setControl(!controlEnabled);
+          await syncState();
+        } catch (_err) {
+          detailText.textContent = "Failed to change controller state";
+        }
+      });
+      focusGameBtn.addEventListener("click", () => {
+        gameFrame.focus();
+        updateFocusState();
+      });
+
+      window.addEventListener("blur", () => {
+        updateFocusState();
+        void setControl(false).catch(() => {});
+      });
+      window.addEventListener("focus", updateFocusState);
+      document.addEventListener("visibilitychange", () => {
+        if (document.hidden) void setControl(false).catch(() => {});
+        updateFocusState();
+      });
+
+      updateFocusState();
+      void syncState();
+      refreshFrame();
+      setInterval(syncState, 200);
+      setInterval(refreshFrame, 150);
+    </script>
   </body>
-  </html>
+</html>

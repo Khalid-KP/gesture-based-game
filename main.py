@@ -1,7 +1,9 @@
 import argparse
+import json
 import time
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 from typing import Any, Optional, Sequence, Tuple
 
 import cv2
@@ -102,6 +104,9 @@ class GestureController:
         confidence: float = 0.7,
         smooth_frames: int = 4,
         use_right_hand_only: bool = True,
+        status_file: Optional[Path] = None,
+        control_file: Optional[Path] = None,
+        frame_file: Optional[Path] = None,
     ) -> None:
         self.mp_hands = mp.solutions.hands
         self.mp_draw = mp.solutions.drawing_utils
@@ -119,11 +124,15 @@ class GestureController:
         self.use_right_hand_only = use_right_hand_only
         self.enabled = True
         self.last_toggle = 0.0
+        self.status_file = status_file
+        self.control_file = control_file
+        self.frame_file = frame_file
 
     def run(self, camera_index: int = 0, show_window: bool = True) -> None:
         cap = cv2.VideoCapture(camera_index)
         if not cap.isOpened():
             raise RuntimeError("Could not open webcam. Check camera permissions and index.")
+        self._write_status(Gesture.NEUTRAL, Gesture.NEUTRAL, "None")
 
         if show_window:
             cv2.namedWindow("Gesture Controller", cv2.WINDOW_NORMAL)
@@ -139,11 +148,14 @@ class GestureController:
                 frame = cv2.flip(frame, 1)
                 raw_gesture, handedness_label, annotated = self._process_frame(frame)
                 stable_gesture = self._smooth(raw_gesture)
+                self._sync_enabled_from_control()
 
                 if self.enabled:
                     self.key_driver.set_state(stable_gesture)
                 else:
                     self.key_driver.release_all()
+                self._write_status(raw_gesture, stable_gesture, handedness_label)
+                self._write_frame(annotated)
 
                 if show_window:
                     panel = self._build_panel(annotated, stable_gesture, handedness_label)
@@ -161,9 +173,58 @@ class GestureController:
                                 self.key_driver.release_all()
         finally:
             self.key_driver.release_all()
+            self._write_status(Gesture.NEUTRAL, Gesture.NEUTRAL, "None")
             cap.release()
             if show_window:
                 cv2.destroyAllWindows()
+
+    def _sync_enabled_from_control(self) -> None:
+        if self.control_file is None:
+            return
+        try:
+            raw = self.control_file.read_text(encoding="utf-8")
+            payload = json.loads(raw) if raw.strip() else {}
+            requested = bool(payload.get("enabled", True))
+            if requested != self.enabled:
+                self.enabled = requested
+                if not self.enabled:
+                    self.key_driver.release_all()
+        except Exception:
+            # Ignore transient parse/write races and keep last known state.
+            return
+
+    def _write_status(self, raw: Gesture, stable: Gesture, handedness: str) -> None:
+        if self.status_file is None:
+            return
+        payload = {
+            "enabled": self.enabled,
+            "raw_gesture": raw.value,
+            "stable_gesture": stable.value,
+            "handedness": handedness,
+            "updated_at": time.time(),
+        }
+        try:
+            self.status_file.parent.mkdir(parents=True, exist_ok=True)
+            tmp = self.status_file.with_suffix(".tmp")
+            tmp.write_text(json.dumps(payload), encoding="utf-8")
+            tmp.replace(self.status_file)
+        except Exception:
+            # Status publishing must never crash the control loop.
+            return
+
+    def _write_frame(self, frame) -> None:
+        if self.frame_file is None:
+            return
+        try:
+            self.frame_file.parent.mkdir(parents=True, exist_ok=True)
+            ok, encoded = cv2.imencode(".jpg", frame)
+            if not ok:
+                return
+            tmp = self.frame_file.with_suffix(".tmp")
+            tmp.write_bytes(encoded.tobytes())
+            tmp.replace(self.frame_file)
+        except Exception:
+            return
 
     def _process_frame(self, frame) -> Tuple[Gesture, str, Any]:
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -369,6 +430,24 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         action="store_true",
         help="Run without OpenCV window (keeps browser focus stable)",
     )
+    parser.add_argument(
+        "--status-file",
+        type=str,
+        default="",
+        help="Optional JSON file path for publishing live controller state",
+    )
+    parser.add_argument(
+        "--control-file",
+        type=str,
+        default="",
+        help="Optional JSON file path for receiving runtime control requests",
+    )
+    parser.add_argument(
+        "--frame-file",
+        type=str,
+        default="",
+        help="Optional JPEG file path for publishing latest camera frame",
+    )
     return parser.parse_args(argv)
 
 
@@ -381,6 +460,9 @@ def main() -> None:
         confidence=args.confidence,
         smooth_frames=args.smooth_frames,
         use_right_hand_only=not args.allow_left_hand,
+        status_file=Path(args.status_file) if args.status_file else None,
+        control_file=Path(args.control_file) if args.control_file else None,
+        frame_file=Path(args.frame_file) if args.frame_file else None,
     )
     controller.run(camera_index=args.camera_index, show_window=not args.no_window)
 

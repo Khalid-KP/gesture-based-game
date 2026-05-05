@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import subprocess
 import sys
+import threading
 import time
 import webbrowser
+from http import HTTPStatus
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Iterable
 
@@ -15,6 +19,10 @@ VENV_PYTHON = PROJECT_DIR / ".venv" / "Scripts" / "python.exe"
 RUNNER_PORT = 8080
 RUNNER_URL = f"http://localhost:{RUNNER_PORT}"
 GAME_URL = "https://poki.com/en/g/hill-climb-racing-lite"
+RUNTIME_DIR = PROJECT_DIR / ".runtime"
+STATE_FILE = RUNTIME_DIR / "gesture-state.json"
+CONTROL_FILE = RUNTIME_DIR / "gesture-control.json"
+FRAME_FILE = RUNTIME_DIR / "gesture-frame.jpg"
 
 
 def parse_args() -> argparse.Namespace:
@@ -26,8 +34,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--preview",
         action=argparse.BooleanOptionalAction,
-        default=True,
-        help="Show webcam preview window (default: enabled)",
+        default=False,
+        help="Show webcam preview window (default: disabled for stable browser focus)",
     )
     parser.add_argument(
         "--ports",
@@ -42,8 +50,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--open",
         choices=("runner", "game", "both"),
-        default="both",
-        help="Which page to open in browser: local runner, direct game, or both",
+        default="runner",
+        help="Which page to open in browser: local runner, direct game, or both (default: runner)",
+    )
+    parser.add_argument(
+        "--ui-mode",
+        choices=("web", "legacy"),
+        default="web",
+        help="UI mode for launch flow (default: web)",
     )
     return parser.parse_args()
 
@@ -145,21 +159,97 @@ def ensure_venv_python() -> None:
     raise SystemExit(1)
 
 
-def start_runner() -> subprocess.Popen[str]:
+def _default_state() -> dict[str, object]:
+    return {
+        "enabled": False,
+        "raw_gesture": "NEUTRAL",
+        "stable_gesture": "NEUTRAL",
+        "handedness": "None",
+        "updated_at": time.time(),
+    }
+
+
+def _write_json(path: Path, payload: dict[str, object]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(payload), encoding="utf-8")
+    tmp.replace(path)
+
+
+def _read_json(path: Path, fallback: dict[str, object]) -> dict[str, object]:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return dict(fallback)
+
+
+def build_runner_handler(
+    web_dir: Path, state_file: Path, control_file: Path, frame_file: Path
+) -> type[SimpleHTTPRequestHandler]:
+    class RunnerHandler(SimpleHTTPRequestHandler):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, directory=str(web_dir), **kwargs)
+
+        def do_GET(self) -> None:
+            if self.path == "/api/state":
+                payload = _read_json(state_file, _default_state())
+                body = json.dumps(payload).encode("utf-8")
+                self.send_response(HTTPStatus.OK)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+            if self.path.startswith("/api/frame"):
+                if not frame_file.exists():
+                    self.send_error(HTTPStatus.SERVICE_UNAVAILABLE, "Frame not ready")
+                    return
+                body = frame_file.read_bytes()
+                self.send_response(HTTPStatus.OK)
+                self.send_header("Content-Type", "image/jpeg")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+            return super().do_GET()
+
+        def do_POST(self) -> None:
+            if self.path != "/api/control":
+                self.send_error(HTTPStatus.NOT_FOUND, "Unknown endpoint")
+                return
+            length = int(self.headers.get("Content-Length", "0"))
+            raw = self.rfile.read(length) if length else b"{}"
+            try:
+                payload = json.loads(raw.decode("utf-8"))
+            except json.JSONDecodeError:
+                self.send_error(HTTPStatus.BAD_REQUEST, "Invalid JSON")
+                return
+            enabled = bool(payload.get("enabled", False))
+            _write_json(control_file, {"enabled": enabled, "updated_at": time.time()})
+            state = _read_json(state_file, _default_state())
+            state["enabled"] = enabled
+            body = json.dumps(state).encode("utf-8")
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    return RunnerHandler
+
+
+def start_runner(
+    state_file: Path, control_file: Path, frame_file: Path
+) -> tuple[ThreadingHTTPServer, threading.Thread]:
     print(f"[1/4] Starting local web runner at {RUNNER_URL} ...")
-    return subprocess.Popen(
-        [
-            str(VENV_PYTHON),
-            "-m",
-            "http.server",
-            str(RUNNER_PORT),
-            "--directory",
-            "web",
-        ],
-        cwd=PROJECT_DIR,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
+    handler = build_runner_handler(PROJECT_DIR / "web", state_file, control_file, frame_file)
+    server = ThreadingHTTPServer(("127.0.0.1", RUNNER_PORT), handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    return server, thread
 
 
 def run_self_check(camera_index: int) -> None:
@@ -182,8 +272,11 @@ def run_self_check(camera_index: int) -> None:
         raise SystemExit(result.returncode)
 
 
-def run_controller(args: argparse.Namespace) -> int:
-    if args.preview:
+def run_controller(
+    args: argparse.Namespace, state_file: Path, control_file: Path, frame_file: Path
+) -> int:
+    use_preview = args.preview if args.ui_mode == "legacy" else False
+    if use_preview:
         print("[3/4] Starting gesture controller with webcam preview...")
         print("      Keep the game tab focused after preview appears.")
     else:
@@ -201,12 +294,26 @@ def run_controller(args: argparse.Namespace) -> int:
         "--smooth-frames",
         str(args.smooth_frames),
     ]
-    if not args.preview:
+    if not use_preview:
         cmd.append("--no-window")
     if args.allow_left_hand:
         cmd.append("--allow-left-hand")
+    cmd.extend(
+        [
+            "--status-file",
+            str(state_file),
+            "--control-file",
+            str(control_file),
+            "--frame-file",
+            str(frame_file),
+        ]
+    )
 
-    process = subprocess.run(cmd, cwd=PROJECT_DIR)
+    try:
+        process = subprocess.run(cmd, cwd=PROJECT_DIR)
+    except KeyboardInterrupt:
+        print("\n[4/4] Stopped by user.")
+        return 130
     print("\n[4/4] Gesture controller exited.")
     return process.returncode
 
@@ -229,22 +336,32 @@ def main() -> None:
         print("Cleanup complete. Exiting because --kill-only was provided.")
         raise SystemExit(0)
 
-    runner = start_runner()
+    RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
+    _write_json(STATE_FILE, _default_state())
+    _write_json(CONTROL_FILE, {"enabled": True, "updated_at": time.time()})
+
+    runner, runner_thread = start_runner(STATE_FILE, CONTROL_FILE, FRAME_FILE)
     time.sleep(1)
+    if args.ui_mode == "web" and args.preview:
+        print("[INFO] --preview is ignored in --ui-mode web to keep single-page focus stable.")
     open_pages(args.open)
     time.sleep(2)
-    run_self_check(args.camera_index)
+    try:
+        run_self_check(args.camera_index)
+    except KeyboardInterrupt:
+        print("\n[2/4] Self-check interrupted by user.")
+        raise SystemExit(130)
 
     exit_code = 0
     try:
-        exit_code = run_controller(args)
+        exit_code = run_controller(args, STATE_FILE, CONTROL_FILE, FRAME_FILE)
+    except KeyboardInterrupt:
+        print("\n[4/4] Launcher interrupted by user.")
+        exit_code = 130
     finally:
-        if runner.poll() is None:
-            runner.terminate()
-            try:
-                runner.wait(timeout=3)
-            except subprocess.TimeoutExpired:
-                runner.kill()
+        runner.shutdown()
+        runner.server_close()
+        runner_thread.join(timeout=3)
     raise SystemExit(exit_code)
 
 

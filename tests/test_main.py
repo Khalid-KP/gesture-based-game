@@ -53,6 +53,11 @@ class CliTests(unittest.TestCase):
         args = parse_args(["--no-window"])
         self.assertTrue(args.no_window)
 
+    def test_status_and_control_file_flags(self) -> None:
+        args = parse_args(["--status-file", "state.json", "--control-file", "control.json"])
+        self.assertEqual(args.status_file, "state.json")
+        self.assertEqual(args.control_file, "control.json")
+
 
 if __name__ == "__main__":
     unittest.main()

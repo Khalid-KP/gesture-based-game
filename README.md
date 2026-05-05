@@ -27,26 +27,30 @@ If you already had the environment from an older install, run `pip install -r re
 ## Run
 
 ```bash
+python run.py
+```
+
+Direct controller mode (without launcher):
+
+```bash
 python main.py
 ```
 
-One-click launcher (Windows):
-
-```bash
-run_game.bat
-```
-
-`run_game.bat` will:
+`python run.py` will:
 
 - Open a local web runner at `http://localhost:8080` with the game embedded
 - Run a quick `--self-check`
 - Start the gesture controller in `--no-window` mode for better keyboard sync
+- Stream live webcam preview/state into the same web page (`/api/frame`, `/api/state`)
 
-Edit the values at the top of `run_game.bat` to change camera index, confidence, smoothing, or allow-left-hand behavior.
+Use CLI flags on `run.py` to tune camera index, confidence, smoothing, or allow-left-hand behavior.
 
 Optional flags:
 
 ```bash
+python run.py --ui-mode legacy --preview
+python run.py --open both
+python run.py --kill-only
 python main.py --camera-index 0 --confidence 0.7 --smooth-frames 4
 python main.py --allow-left-hand
 python main.py --self-check
@@ -55,10 +59,12 @@ python main.py --no-window
 
 ## Runtime Notes
 
-- Keep the webcam window visible on the left side of your screen.
+- Launcher default (`--ui-mode web`) keeps one-page mode and ignores `--preview`.
+- Use `python run.py --ui-mode legacy --preview` only for old OpenCV-window workflow.
 - Keep the game tab/window focused when control is ON.
-- Press `t` to toggle input ON/OFF.
-- Press `q` or `Esc` to quit.
+- In legacy preview mode, press `t` to toggle input ON/OFF.
+- In legacy preview mode, press `q` or `Esc` to quit.
+- In no-window mode, stop from terminal with `Ctrl+C`.
 
 ## Validation
 
@@ -81,8 +87,8 @@ Manual checks (required for final gameplay validation):
 
 ## Recommended Play Layout
 
-1. Open Hill Climb Racing Lite in browser.
-2. Place game window on the right side.
-3. Start `python main.py`.
-4. Keep the webcam panel on the left side.
-5. Focus the game window and play with hand gestures.
+1. Start `python run.py`.
+2. Open `http://localhost:8080` if it did not auto-open.
+3. Wait for webcam preview to appear in the left panel.
+4. Click `Enable Control`, then `Focus Game`.
+5. Keep this tab focused and play with hand gestures.
