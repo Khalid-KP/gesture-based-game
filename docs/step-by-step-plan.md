@@ -93,7 +93,9 @@ Completion notes:
 - Added automated validation commands:
   - `.venv\Scripts\python.exe -m py_compile main.py`
   - `.venv\Scripts\python.exe -m unittest discover -s tests -v`
+  - `.venv\Scripts\python.exe main.py --self-check --camera-index 0`
 - Added unit tests for finger-state logic, gesture classification, smoothing threshold, and CLI parsing.
+- Added runtime `--self-check` mode to validate keyboard driver, camera access, and MediaPipe initialization.
 - Manual gameplay validation in Notepad + browser still required on target machine.
 
 ## Phase 7 - Push-Ready Checks

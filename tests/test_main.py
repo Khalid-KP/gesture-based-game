@@ -45,6 +45,10 @@ class CliTests(unittest.TestCase):
         self.assertTrue(args.allow_left_hand)
         self.assertEqual(args.smooth_frames, 6)
 
+    def test_self_check_flag(self) -> None:
+        args = parse_args(["--self-check"])
+        self.assertTrue(args.self_check)
+
 
 if __name__ == "__main__":
     unittest.main()

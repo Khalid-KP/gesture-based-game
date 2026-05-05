@@ -22,6 +22,8 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
+If you already had the environment from an older install, run `pip install -r requirements.txt --upgrade` once to align package versions.
+
 ## Run
 
 ```bash
@@ -33,6 +35,7 @@ Optional flags:
 ```bash
 python main.py --camera-index 0 --confidence 0.7 --smooth-frames 4
 python main.py --allow-left-hand
+python main.py --self-check
 ```
 
 ## Runtime Notes
@@ -49,6 +52,7 @@ Automated checks:
 ```bash
 .venv\Scripts\python.exe -m py_compile main.py
 .venv\Scripts\python.exe -m unittest discover -s tests -v
+.venv\Scripts\python.exe main.py --self-check --camera-index 0
 ```
 
 Manual checks (required for final gameplay validation):

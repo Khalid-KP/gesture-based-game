@@ -279,6 +279,56 @@ class GestureController:
         return panel
 
 
+def run_self_check(camera_index: int = 0) -> int:
+    """Run environment/runtime checks and return process exit code."""
+    checks: list[tuple[str, bool, str]] = []
+
+    # Validate keyboard injection support.
+    try:
+        KeyDriver()
+        checks.append(("keyboard_driver", True, "Initialized"))
+    except Exception as exc:  # pragma: no cover - platform-dependent.
+        checks.append(("keyboard_driver", False, str(exc)))
+
+    # Validate camera access.
+    cap = cv2.VideoCapture(camera_index)
+    try:
+        if not cap.isOpened():
+            checks.append(("camera_open", False, f"Could not open camera index {camera_index}"))
+        else:
+            ok, _frame = cap.read()
+            checks.append(("camera_read_frame", ok, "Read one frame" if ok else "Read failed"))
+    finally:
+        cap.release()
+
+    # Validate MediaPipe graph setup.
+    try:
+        with mp.solutions.hands.Hands(
+            static_image_mode=False,
+            max_num_hands=1,
+            min_detection_confidence=0.5,
+            min_tracking_confidence=0.5,
+        ):
+            pass
+        checks.append(("mediapipe_hands", True, "Initialized"))
+    except Exception as exc:
+        checks.append(("mediapipe_hands", False, str(exc)))
+
+    print("Gesture Controller Self-Check")
+    print("=" * 30)
+    for name, ok, detail in checks:
+        status = "PASS" if ok else "FAIL"
+        print(f"[{status}] {name}: {detail}")
+
+    failed = [name for name, ok, _detail in checks if not ok]
+    if failed:
+        print(f"Self-check result: FAILED ({', '.join(failed)})")
+        return 1
+
+    print("Self-check result: PASSED")
+    return 0
+
+
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="One-hand gesture controller for Hill Climb Racing Lite"
@@ -306,11 +356,19 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         action="store_true",
         help="Disable right-hand-only filter",
     )
+    parser.add_argument(
+        "--self-check",
+        action="store_true",
+        help="Run environment/camera checks and exit",
+    )
     return parser.parse_args(argv)
 
 
 def main() -> None:
     args = parse_args()
+    if args.self_check:
+        raise SystemExit(run_self_check(camera_index=args.camera_index))
+
     controller = GestureController(
         confidence=args.confidence,
         smooth_frames=args.smooth_frames,
