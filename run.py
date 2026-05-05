@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -123,10 +124,13 @@ def kill_window_titles() -> None:
 
 def kill_known_python_commands() -> None:
     # Scope kills to gesture project command lines to avoid stopping unrelated Python apps.
+    self_pid = str(os.getpid())
     ps = (
         "$procs = Get-CimInstance Win32_Process | Where-Object "
         "{ ($_.Name -ieq 'python.exe' -or $_.Name -ieq 'pythonw.exe') "
-        "-and ($_.CommandLine -match 'main\\.py' -or $_.CommandLine -match 'http\\.server\\s+8080') }; "
+        f"-and $_.ProcessId -ne {self_pid} "
+        "-and ($_.CommandLine -match 'main\\.py' "
+        "-or $_.CommandLine -match 'http\\.server\\s+8080') }; "
         "foreach ($p in $procs) { try { Stop-Process -Id $p.ProcessId -Force -ErrorAction Stop } catch {} }"
     )
     run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps])
@@ -136,10 +140,6 @@ def cleanup(ports: Iterable[int]) -> None:
     print("[0/4] Stopping existing runner/controller processes...")
     kill_window_titles()
     kill_known_python_commands()
-
-    print("[0/4] Killing all listening Python ports...")
-    for pid in get_python_listener_pids():
-        kill_pid(pid)
 
     print("[0/4] Freeing requested ports...")
     for port in ports:
@@ -246,7 +246,10 @@ def start_runner(
 ) -> tuple[ThreadingHTTPServer, threading.Thread]:
     print(f"[1/4] Starting local web runner at {RUNNER_URL} ...")
     handler = build_runner_handler(PROJECT_DIR / "web", state_file, control_file, frame_file)
-    server = ThreadingHTTPServer(("127.0.0.1", RUNNER_PORT), handler)
+    class ReusableThreadingHTTPServer(ThreadingHTTPServer):
+        allow_reuse_address = True
+
+    server = ReusableThreadingHTTPServer(("127.0.0.1", RUNNER_PORT), handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     return server, thread
