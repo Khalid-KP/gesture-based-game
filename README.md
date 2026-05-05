@@ -4,7 +4,7 @@ Real-time one-hand gesture controller for the browser game [Hill Climb Racing Li
 
 ## Demo
 
-<video src="docs/gesture_demo.mp4" controls width="900"></video>
+https://github.com/user-attachments/assets/0c7068d0-53fd-4ea6-9c3c-953d9df52df5
 
 ## Controls
 
