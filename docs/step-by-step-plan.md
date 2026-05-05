@@ -50,6 +50,8 @@ Completion notes:
 
 ## Phase 4 - Keyboard Output
 
+Status: DONE
+
 1. Use `pynput` key down/up events.
 2. Map gestures:
    - ACCELERATING -> hold Right Arrow
@@ -57,7 +59,15 @@ Completion notes:
    - NEUTRAL -> release both
 3. Add safe toggle key (`t`) to enable/disable output quickly.
 
+Completion notes:
+
+- `KeyDriver` handles key-down/key-up events with press-state guards.
+- Gesture mapping is wired as specified: accelerate->Right, brake->Left, neutral->release both.
+- Safe runtime toggle is implemented on `t` with debounce and immediate key release when OFF.
+
 ## Phase 5 - UX Overlay
+
+Status: DONE
 
 1. Show webcam view in a movable/resizeable left panel.
 2. Add status box under camera:
@@ -65,6 +75,12 @@ Completion notes:
    - Detected hand
    - Current game action
 3. Add quit shortcut (`q`/`Esc`).
+
+Completion notes:
+
+- OpenCV panel uses normal window mode with explicit left-side placement and resizable behavior.
+- Overlay renders mode state, detected hand label, and current stable action.
+- Quit flow supports both `q` and `Esc` with cleanup that releases keys and closes windows.
 
 ## Phase 6 - Validation
 
